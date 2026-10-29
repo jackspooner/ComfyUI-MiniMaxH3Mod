@@ -1545,6 +1545,35 @@ class MiniMaxH3RefModMaskList:
         return (items,)
 
 
+class MiniMaxH3RefModMaskListMulti(io.ComfyNode):
+    """Collect explicit mask sockets without resizing different source canvases."""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="MiniMaxH3RefModMaskListMulti",
+            display_name="Collect H3 RefMod Mask Slots",
+            category="MiniMax-H3/mod",
+            description="Collect 1–24 ordered masks for image slots followed by video slots. "
+                        "Preserves each mask's dimensions; one mask broadcasts in the extractor.",
+            inputs=[io.Autogrow.Input("masks", template=io.Autogrow.TemplatePrefix(
+                input=io.Mask.Input("mask"), prefix="mask_", min=1, max=24))],
+            outputs=[io.Custom("H3_MASK_LIST").Output("mask_list")],
+        )
+
+    @classmethod
+    def execute(cls, masks) -> io.NodeOutput:
+        if not isinstance(masks, dict) or not 1 <= len(masks) <= 24:
+            raise ValueError("Connect 1–24 ordered mask slots.")
+        expected = [f"mask_{index}" for index in range(len(masks))]
+        if set(masks) != set(expected):
+            raise ValueError("Mask slots must be contiguous from mask_0.")
+        # A socket may contain a MASK batch; reuse the existing normalization
+        # and splitting contract while preserving numeric slot order.
+        collected = MiniMaxH3RefModMaskList().collect([masks[key] for key in expected])[0]
+        return io.NodeOutput(collected)
+
+
 class MiniMaxH3RefModExtract(io.ComfyNode):
     """
     Turn one or more references of the same concept into a RefMod.
@@ -2355,6 +2384,7 @@ class MiniMaxH3RefModMasterExtract(io.ComfyNode):
 
 
 NODE_CLASS_MAPPINGS = {
+    "MiniMaxH3RefModMaskListMulti": MiniMaxH3RefModMaskListMulti,
     "MiniMaxH3RefModMaskList": MiniMaxH3RefModMaskList,
     "MiniMaxH3RefModBundleSave": MiniMaxH3RefModBundleSave,
     "MiniMaxH3RefModTextEncode": MiniMaxH3RefModTextEncode,
@@ -2374,6 +2404,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "MiniMaxH3RefModMaskListMulti": "Collect H3 RefMod Mask Slots",
     "MiniMaxH3RefModMaskList": "Collect H3 RefMod Masks",
     "MiniMaxH3RefModBundleSave": "Save H3 RefMod Bundle",
     "MiniMaxH3RefModTextEncode": "H3 RefMod Text Encode",

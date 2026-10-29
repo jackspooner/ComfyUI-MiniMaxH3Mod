@@ -2,6 +2,28 @@
 
 # ComfyUI-MiniMaxH3Mod - Changing the F#cking world with cigarretes and coffe.
 
+## Workspace2 fork
+
+This fork preserves the [upstream project](https://github.com/Luisacaotica/ComfyUI-MiniMaxH3Mod),
+[upstream README](https://github.com/Luisacaotica/ComfyUI-MiniMaxH3Mod/blob/main/README.md)
+and its license and credits. It adds **Collect H3 RefMod Mask Slots**
+(`MiniMaxH3RefModMaskListMulti`): 1–24 explicit mask sockets, in numeric order,
+feeding the existing extractor's `mask_list`. Different image sizes are preserved;
+one mask broadcasts, otherwise extraction requires one per reference, images then
+videos. This makes multi-mask service graphs possible without an external list
+node. The existing list collector and extraction behavior remain supported.
+
+API graphs use `masks.mask_0` through `masks.mask_23`, each a MASK link. Masks use
+white/1 to preserve content and black/0 for background weakening; they are static
+per-reference masks, not tracked per-frame masks. No model weights or dependencies
+were added. Restarting ComfyUI is required to discover the new node after deploying
+this fork; source installation alone does not activate it.
+
+For a checkout outside ComfyUI, run the CPU-only collector unit test with
+`COMFYUI_ROOT=/path/to/ComfyUI /path/to/comfy-python tests/test_mask_slots.py`.
+It checks ordering, dimensions, batches and errors without queue validation,
+model loading or inference. The existing installation instructions below apply.
+
 > 🚧 **Under construction** — API and node schemas are still evolving. Mods
 > stay compatible, but expect node names/inputs to shift between versions.
 
