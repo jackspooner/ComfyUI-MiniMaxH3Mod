@@ -45,6 +45,11 @@ import torch.nn.functional as F
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
+if __package__:
+    from . import timing
+else:
+    import timing  # extract_mod.py also supports the original flat-module CLI.
+
 # Metadata key embedded in the safetensors header (keeps a mod in one file,
 # so it can be shared/uploaded as a single artifact).
 META_KEY = "refmod_meta"
@@ -68,6 +73,7 @@ CONCEPT_TYPES = (
 )
 
 
+@timing.apply_measured('blur')
 def _blur_latent(z: torch.Tensor, factor: int = 8) -> torch.Tensor:
     """Heavy spatial low-pass (downsample then upsample) used as the
     weakening target for ``ref_block``'s ``strength`` below ``1.0``.
@@ -86,6 +92,7 @@ def _blur_latent(z: torch.Tensor, factor: int = 8) -> torch.Tensor:
     manifold (smooth, plausible) while still discarding detail as strength
     drops, which is what "weaker reference" should actually look like.
     """
+    timing.apply_tensor('blur_plan', z, factor=factor, backend=z.device.type)
     if z.device.type == "mps":
         # MPS lacks adaptive_avg_pool3d (and some non-divisible pooling
         # shapes). Keep this small preprocessing chain on CPU explicitly,
@@ -611,6 +618,7 @@ class H3RefMod:
 
     # ── native ref block ──────────────────────────────────────────────
 
+    @timing.apply_measured('reference')
     def ref_block(self, strength: float = 1.0,
                   curve=None) -> Optional[Dict]:
         """
@@ -640,17 +648,29 @@ class H3RefMod:
         identical to passing ``strength`` alone.
         """
         if strength <= 0.0:
+            timing.apply_tensor('reference_plan', self.latent, native=type(self) is H3RefMod,
+                                kind=self.kind, frames=self.latent_t, branch='drop', weights=0, strength=strength)
             return None
         latent = self.latent
         strengths = curve_strengths(curve, self.latent_t) if curve is not None else None
         if strengths is not None:
             weights = [max(0.0, min(1.0, strength * value)) for value in strengths]
-            if any(value < 1.0 for value in weights):
+            mixing = any(value < 1.0 for value in weights)
+            timing.apply_tensor('reference_plan', latent, native=type(self) is H3RefMod,
+                                kind=self.kind, frames=self.latent_t, branch='frame_mix' if mixing else 'reuse',
+                                weights=len(weights), strength=strength)
+            if mixing:
                 shape = (1, 1, 1, self.latent_t) if self.kind == "audio" else (1, 1, self.latent_t, 1, 1)
                 st = latent.new_tensor(weights).view(shape)
                 latent = st * latent + (1.0 - st) * _blur_latent(latent)
         elif strength < 1.0:
+            timing.apply_tensor('reference_plan', latent, native=type(self) is H3RefMod,
+                                kind=self.kind, frames=self.latent_t, branch='scalar_mix', weights=0, strength=strength)
             latent = strength * latent + (1.0 - strength) * _blur_latent(latent)
+        else:
+            timing.apply_tensor('reference_plan', latent, native=type(self) is H3RefMod,
+                                kind=self.kind, frames=self.latent_t, branch='reuse', weights=0, strength=strength)
+        timing.apply_tensor('reference_output', latent)
         if self.kind == "audio":
             return {"kind": "audio", "ref_audio_t": self.latent_t, "audio_latent": latent}
         block: Dict = {

@@ -20,6 +20,7 @@ import torch
 from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
 
 from .core import CURVE_DIRECTIONS, CURVE_SHAPES, curve_strengths
+from . import timing
 
 SIZE = 1024
 
@@ -93,12 +94,14 @@ def _text_w(draw: ImageDraw.ImageDraw, text: str, font) -> int:
 
 # ── the curve graph ──────────────────────────────────────────────────────────
 
+@timing.apply_measured('debug_render')
 def render_debug_grid(spec, preset_name: str = "") -> Image.Image:
     """Render the 1024x1024 curve graph for an Apply configuration.
 
     ``spec`` is the resolved (direction, shape, value) curve tuple and
     ``preset_name`` the active graph preset (shown when one is loaded).
     """
+    timing.apply_emit('debug_plan', width=SIZE, height=SIZE, samples=_CURVE_SAMPLES)
     img = Image.new("RGB", (SIZE, SIZE), BG)
     draw = ImageDraw.Draw(img)
 

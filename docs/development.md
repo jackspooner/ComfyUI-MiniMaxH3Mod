@@ -45,3 +45,17 @@ latent scan, device query or synchronization is added. Bundle loads have no cach
 and no extra file identity read. Opaque process-local correlation objects never
 enter durable records. Metadata and read durations remain separate from model
 execution, and no backbone/model identity is inferred from a RefMod filename.
+
+`checks/test_application_timing.py` additionally runs real tiny visual/audio
+reference weakening and the actual PIL debug graph, preset I/O in a temporary
+directory, and native SQLite/schema checks. It verifies enabled/disabled output
+parity, unchanged inputs and blur call counts, seeded subset/saved overrides,
+observer/original failures, no per-reference SQL snapshots, read-only status and
+continued execution beyond the telemetry limit. Apply observes each selected copy
+at its existing branch, without recomputing curves, scrambling or latent values.
+Effective strength and original source ordinal are audit data; processed shape,
+precision/device/regime and drop/reuse/mix branch describe work. Debug outputs and
+inclusive CPU spans are measurements, never extra queue stages. MPS transfer,
+custom RefMod classes, Step Curve, Continuum, Text Encode, extraction/refinement
+and direct audio creation need separate coverage. Model-free stages retain unknown
+model/profile rather than inferring a checkpoint from an asset name.

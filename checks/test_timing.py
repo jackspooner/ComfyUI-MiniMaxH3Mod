@@ -132,6 +132,7 @@ class TimingTests(unittest.TestCase):
         stage = record['stages'][0]
         self.assertEqual(stage['kind'], 'loading')
         self.assertTrue(stage['workload']['complete'], stage['reasons'])
+        self.assertNotIn('refmod_loader_work_unmeasured', record['workload']['evidence']['reasons'])
         self.assertIsNone(stage['workload']['modelIdentity'])
         self.assertEqual(stage['workload']['profile'], 'unknown')
         self.assertEqual(stage['workload']['resolved']['refmodLoader.references']['value'], 1)
