@@ -24,8 +24,14 @@ report actual slot/member selection, copies, CPU latent shape/precision, standal
 cache reuse and uncached bundle loading. File stamps are hashed metadata evidence,
 not content verification. CPU read boundaries do not synchronize GPUs. Stock/older
 ComfyUI still runs these nodes without the optional collector; observer failures
-cannot replay or fail loading. This covers loading only: extraction, refinement,
-application, audio creation and model-free loader forecasting remain incomplete.
+cannot replay or fail loading. Apply also reports actual selection/order, drop,
+reuse and scalar/frame mixing, latent precision/gradient regime, blur inputs,
+preset I/O and debug rendering/conversion. Effective strengths, source ordinals,
+outputs and overlapping CPU spans remain audit/measurement evidence. It observes
+up to 256 selected references including copies, then retains an explicit gap
+while executing all original work. Extraction, refinement, Step Curve/Continuum,
+Text Encode, audio creation and model-free loader forecasting remain incomplete;
+custom RefMod implementations and MPS blur fallback retain gaps.
 Source/tests do not establish serving activation or estimate accuracy.
 See [fork development](docs/development.md) for prerequisites, the non-installing
 isolated-worktree setup command, CPU checks and inference/activation limits.

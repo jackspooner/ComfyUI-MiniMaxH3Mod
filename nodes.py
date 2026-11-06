@@ -382,6 +382,7 @@ def _list_graph_presets() -> List[str]:
     return names
 
 
+@timing.apply_measured('preset_read')
 def _load_graph_preset(name: str) -> Optional[tuple]:
     """Read a graph preset -> (direction, shape, value) or None if invalid.
 
@@ -409,6 +410,7 @@ def _load_graph_preset(name: str) -> Optional[tuple]:
     return (direction, shape, value)
 
 
+@timing.apply_measured('preset_save')
 def _save_graph_preset(name: str, spec, img=None) -> str:
     """Write a (direction, shape, value) tuple as a PNG preset with tEXt meta.
 
@@ -620,11 +622,12 @@ def _ref_blocks(mods, retention, curve=None, seed=-1, scramble_mode="legacy_subs
             raise ValueError("Unknown scramble mode.")
         print(f"[MiniMaxH3RefModApply] scramble seed={int(seed)}: "
               f"{len(mods)} refs -> kept {len(items)} (order shuffled)")
+    source_order = timing.apply_selection(mods, items, int(seed) >= 0 and len(mods) > 1)
     _check_token_budget(items, max_total_tokens)
     blocks = []
     notes = []
     summaries = []  # (name, effective average multiplier)
-    for mod, strength in items:
+    for index, (mod, strength) in enumerate(items):
         eff = min(1.0, max(0.0, strength * factor))
         used_curve = curve
         if (mod.latent_t <= 1 and isinstance(curve, tuple) and len(curve) == 3
@@ -641,7 +644,8 @@ def _ref_blocks(mods, retention, curve=None, seed=-1, scramble_mode="legacy_subs
                     f"{cap:.2f} as its strength cap instead")
                 eff = min(eff, cap)
             used_curve = None
-        block = mod.ref_block(eff, curve=used_curve)
+        with timing.apply_reference(index, source_order):
+            block = mod.ref_block(eff, curve=used_curve)
         if block is not None:
             # marker the step-curve wrapper uses to tell this ref apart from
             # native ref2va refs (original input video, keyframes, ...) so it
@@ -1056,10 +1060,13 @@ class MiniMaxH3RefModApply(io.ComfyNode):
         )
 
     @classmethod
+    @timing.application
     def execute(cls, conditioning, mods, retention=1.0,
                 curve_direction="constant", curve_shape="linear", curve_value=1.0,
                 strength_curve=None, scramble_seed=-1, graph_preset="", save_preset_as="",
                 override=False, scramble_mode="legacy_subset", scramble_keep=1, max_total_tokens=0):
+        timing.apply_emit('settings', preset_read=bool(graph_preset and graph_preset != '(none)'),
+                          preset_save=bool(save_preset_as), conditioning='native' if isinstance(conditioning, list) else 'pack')
         # workflows saved before the curve split pass the old single preset name
         curve = strength_curve if strength_curve is not None \
             else (curve_direction, curve_shape, curve_value)
@@ -1131,7 +1138,11 @@ class MiniMaxH3RefModApply(io.ComfyNode):
             out = replace(conditioning, refs=list(conditioning.refs) + blocks)
             print(f"[MiniMaxH3RefModApply] retention={retention} "
                   f"({len(blocks)} ref block(s) injected, {len(out.refs)} total)")
-        return io.NodeOutput(out, pil_to_tensor(img))
+        with timing.apply_measure('debug_conversion'):
+            debug = pil_to_tensor(img)
+        timing.apply_tensor('debug_output', debug)
+        timing.apply_emit('attached', entries=len(out) if isinstance(out, list) else 1, blocks=len(blocks))
+        return io.NodeOutput(out, debug)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
