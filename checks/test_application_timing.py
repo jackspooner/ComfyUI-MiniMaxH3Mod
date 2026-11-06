@@ -147,3 +147,17 @@ class ApplicationTimingTests(unittest.TestCase):
         self.assertIn('refmod_apply_reference_limit', state['reasons'])
         self.assertEqual(len(state['refmod_apply']['references']), 256)
         self.assertEqual(result[0], [])
+
+    def test_dropped_custom_reference_metadata_failure_never_fails_original_work(self):
+        class Custom(N.H3RefMod):
+            def __getattribute__(self, key):
+                if key == 'latent':
+                    raise ValueError('custom latent unavailable')
+                return super().__getattribute__(key)
+        mod = Custom(name='custom', kind='image', latent=None)
+        self.assertEqual(N.MiniMaxH3RefModApply.execute([], [(mod, 0)])[0], [])
+        state = {'resolved': {}, 'measurements': {}, 'reasons': []}
+        for event, facts in self.events:
+            observe_refmod_apply_metrics(state, event, facts)
+        self.assertFalse(refmod_apply_complete(state))
+        self.assertIn('refmod_apply_metadata_unresolved', state['reasons'])

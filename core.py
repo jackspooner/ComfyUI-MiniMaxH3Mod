@@ -648,28 +648,23 @@ class H3RefMod:
         identical to passing ``strength`` alone.
         """
         if strength <= 0.0:
-            timing.apply_tensor('reference_plan', self.latent, native=type(self) is H3RefMod,
-                                kind=self.kind, frames=self.latent_t, branch='drop', weights=0, strength=strength)
+            timing.apply_plan(self, 'drop', 0, strength, type(self) is H3RefMod)
             return None
         latent = self.latent
         strengths = curve_strengths(curve, self.latent_t) if curve is not None else None
         if strengths is not None:
             weights = [max(0.0, min(1.0, strength * value)) for value in strengths]
             mixing = any(value < 1.0 for value in weights)
-            timing.apply_tensor('reference_plan', latent, native=type(self) is H3RefMod,
-                                kind=self.kind, frames=self.latent_t, branch='frame_mix' if mixing else 'reuse',
-                                weights=len(weights), strength=strength)
+            timing.apply_plan(self, 'frame_mix' if mixing else 'reuse', len(weights), strength, type(self) is H3RefMod)
             if mixing:
                 shape = (1, 1, 1, self.latent_t) if self.kind == "audio" else (1, 1, self.latent_t, 1, 1)
                 st = latent.new_tensor(weights).view(shape)
                 latent = st * latent + (1.0 - st) * _blur_latent(latent)
         elif strength < 1.0:
-            timing.apply_tensor('reference_plan', latent, native=type(self) is H3RefMod,
-                                kind=self.kind, frames=self.latent_t, branch='scalar_mix', weights=0, strength=strength)
+            timing.apply_plan(self, 'scalar_mix', 0, strength, type(self) is H3RefMod)
             latent = strength * latent + (1.0 - strength) * _blur_latent(latent)
         else:
-            timing.apply_tensor('reference_plan', latent, native=type(self) is H3RefMod,
-                                kind=self.kind, frames=self.latent_t, branch='reuse', weights=0, strength=strength)
+            timing.apply_plan(self, 'reuse', 0, strength, type(self) is H3RefMod)
         timing.apply_tensor('reference_output', latent)
         if self.kind == "audio":
             return {"kind": "audio", "ref_audio_t": self.latent_t, "audio_latent": latent}

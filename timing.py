@@ -103,6 +103,17 @@ def apply_tensor(event, tensor, **facts):
         apply_emit('metadata_unavailable')
 
 
+def apply_plan(mod, branch, weights, strength, native):
+    if _application.get() is None or _reference.get() == -1 or not enabled():
+        return
+    try:
+        apply_tensor('reference_plan', mod.latent, native=native, kind=mod.kind,
+                     frames=mod.latent_t, branch=branch, weights=weights, strength=strength)
+    except Exception:
+        # In particular, a dropped custom reference need not expose a latent.
+        apply_emit('metadata_unavailable')
+
+
 @contextmanager
 def apply_measure(phase):
     if _application.get() is None or _reference.get() == -1 or not enabled():
