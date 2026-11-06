@@ -19,6 +19,17 @@ per-reference masks, not tracked per-frame masks. No model weights or dependenci
 were added. Restarting ComfyUI is required to discover the new node after deploying
 this fork; source installation alone does not activate it.
 
+With the matching Workspace2 native timing collector, Loader and Axis additionally
+report actual slot/member selection, copies, CPU latent shape/precision, standalone
+cache reuse and uncached bundle loading. File stamps are hashed metadata evidence,
+not content verification. CPU read boundaries do not synchronize GPUs. Stock/older
+ComfyUI still runs these nodes without the optional collector; observer failures
+cannot replay or fail loading. This covers loading only: extraction, refinement,
+application, audio creation and model-free loader forecasting remain incomplete.
+Source/tests do not establish serving activation or estimate accuracy.
+See [fork development](docs/development.md) for prerequisites, the non-installing
+isolated-worktree setup command, CPU checks and inference/activation limits.
+
 For a checkout outside ComfyUI, run the CPU-only collector unit test with
 `COMFYUI_ROOT=/path/to/ComfyUI /path/to/comfy-python tests/test_mask_slots.py`.
 It checks ordering, dimensions, batches and errors without queue validation,

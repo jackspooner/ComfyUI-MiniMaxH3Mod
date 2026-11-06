@@ -66,6 +66,7 @@ from .common import (
     ensure_min_size as _ensure_min_size,
 )
 from . import continuum_bridge
+from . import timing
 from .audio import make_audio_mod
 from .core import (
     CONCEPT_TYPES,
@@ -260,15 +261,18 @@ def _cache_mod(path, mod):
         _MOD_CACHE_STAMPS.pop(evicted, None)
 
 
-def _load_mod(name: str) -> H3RefMod:
+def _load_mod(name: str, timing_slot=None) -> H3RefMod:
     path = _find_mod_path(name)
     key = os.path.normcase(path)
     if key in _MOD_CACHE and _MOD_CACHE_STAMPS.get(key) == _file_stamp(path):
+        timing.loaded(timing_slot, _MOD_CACHE[key], True, 'standalone', _MOD_CACHE_STAMPS.get(key))
         return _MOD_CACHE[key]
     _MOD_CACHE.pop(key, None)
     _MOD_CACHE_STAMPS.pop(key, None)
-    mod = H3RefMod.load(path, device="cpu")
-    _cache_mod(path, mod)
+    with timing.measure('standalone_read', timing_slot):
+        mod = H3RefMod.load(path, device="cpu")
+        _cache_mod(path, mod)
+    timing.loaded(timing_slot, mod, False, 'standalone', _MOD_CACHE_STAMPS.get(key))
     return mod
 
 
@@ -736,15 +740,24 @@ def _load_components(name, slot, kwargs):
         raise ValueError("Components must be All, Visual or Audio.")
     weights = {kind: float(kwargs.get(f"{kind}_strength_{slot}", 1.0)) for kind in ("visual", "audio")}
     path = _find_mod_path(name)
-    meta = read_refmod_meta(path)
+    with timing.measure('metadata_read', slot):
+        meta = read_refmod_meta(path)
     if not isinstance(meta, dict):
         raise ValueError(f"'{name}' has no valid RefMod metadata.")
     if meta.get("kind") == "bundle":
-        return load_bundle(path, selection, weights["visual"], weights["audio"])
+        with timing.measure('bundle_read', slot):
+            loaded = load_bundle(path, selection, weights["visual"], weights["audio"])
+        for mod, _weight in loaded:
+            timing.loaded(slot, mod, False, 'bundle')
+        timing.emit('selection', slot=slot, container='bundle', members=len(loaded))
+        return loaded
     kind = "audio" if meta.get("kind") == "audio" else "visual"
     if weights[kind] <= 0 or (selection != "All" and selection.lower() != kind):
+        timing.emit('selection', slot=slot, container='standalone', members=0)
         return []
-    return [(_load_mod(name), weights[kind])]
+    loaded = [(_load_mod(name, timing_slot=slot), weights[kind])]
+    timing.emit('selection', slot=slot, container='standalone', members=1)
+    return loaded
 
 
 class MiniMaxH3RefModsLoader:
@@ -794,6 +807,7 @@ class MiniMaxH3RefModsLoader:
     def IS_CHANGED(cls, show_info=False, **kwargs):
         return _mods_changed(kwargs)
 
+    @timing.loader('slots')
     def load(self, show_info=False, max_total_tokens=0, **kwargs):
         schema = self.INPUT_TYPES()
         _check_loader_numbers({**schema["required"], **schema["optional"]}, kwargs)
@@ -801,6 +815,11 @@ class MiniMaxH3RefModsLoader:
         for i in range(1, self.MAX_SLOTS + 1):
             name = _normalize_mod_name(kwargs.get(f"mod_{i}"))
             strength = float(kwargs.get(f"strength_{i}", 1.0))
+            timing.emit('slot', slot=i, active=bool(name) and strength > 0.0, side='single',
+                        strength=strength, copies=int(kwargs.get(f"copies_{i}", 1)),
+                        selection=kwargs.get(f"components_{i}", 'All'),
+                        visual_strength=float(kwargs.get(f"visual_strength_{i}", 1.0)),
+                        audio_strength=float(kwargs.get(f"audio_strength_{i}", 1.0)))
             if not name or strength <= 0.0:
                 continue
             for mod, component_strength in _load_components(name, i, kwargs):
@@ -880,6 +899,7 @@ class MiniMaxH3RefModsAxis:
     def IS_CHANGED(cls, show_info=False, **kwargs):
         return _mods_changed(kwargs)
 
+    @timing.loader('axis')
     def load(self, show_info=False, max_total_tokens=0, **kwargs):
         schema = self.INPUT_TYPES()
         _check_loader_numbers({**schema["required"], **schema["optional"]}, kwargs)
@@ -887,9 +907,15 @@ class MiniMaxH3RefModsAxis:
         for i in range(1, self.MAX_SLOTS + 1):
             value = float(kwargs.get(f"value_{i}", 0.0))
             if abs(value) < 1e-6:
+                timing.emit('slot', slot=i, active=False, side='none', strength=abs(value), copies=1,
+                            selection='All', visual_strength=1.0, audio_strength=1.0)
                 continue
             side = "b" if value > 0 else "a"
             name = _normalize_mod_name(kwargs.get(f"mod_{side}_{i}"))
+            timing.emit('slot', slot=i, active=bool(name), side=side, strength=abs(value), copies=1,
+                        selection=kwargs.get(f"components_{i}", 'All'),
+                        visual_strength=float(kwargs.get(f"visual_strength_{i}", 1.0)),
+                        audio_strength=float(kwargs.get(f"audio_strength_{i}", 1.0)))
             if not name:
                 continue
             loads.extend((mod, abs(value) * weight) for mod, weight in _load_components(name, i, kwargs))
